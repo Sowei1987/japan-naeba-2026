@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#F5F5F7">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="苗場滑雪">
+    
+    <title>日本苗場滑雪之旅 (v5.1)</title>
+    
+    <!-- PWA Manifest & Icons -->
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg">
+    <link rel="apple-touch-icon" href="./icon.svg">
+    
+    <!-- 強制清除舊版 Service Worker -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                for(let registration of registrations) {
+                    if (registration.active && registration.active.scriptURL.indexOf('service-worker.js') === -1) {
+                        registration.unregister();
+                    }
+                }
+            });
+        }
+    </script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        japan: {
+                            bg: '#F5F5F7',      /* 雲雪白 */
+                            primary: '#1E3A8A', /* 深靛藍 */
+                            accent: '#BE123C',  /* 日本紅 */
+                            snow: '#E0F2FE',    /* 冰藍 */
+                            dark: '#0F172A'     /* 夜空黑 */
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(30, 58, 138, 0.08)',
+                        'float': '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- React Core -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
+            background-color: #F5F5F7;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+        }
+        #root {
+            max-width: 480px;
+            margin-left: auto;
+            margin-right: auto;
+            background-color: #F5F5F7;
+            min-height: 100vh;
+            position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.03);
+            padding-bottom: 100px;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .loader {
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid #BE123C;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Glassmorphism utility */
+        .glass {
+            background: rgba(245, 245, 247, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+
+    <div id="root">
+        <div style="height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #F5F5F7;">
+            <div class="loader"></div>
+            <div style="margin-top: 20px; color: #1E3A8A; font-weight: bold;">Loading Japan Trip...</div>
+            <div style="margin-top: 10px; font-size: 12px; color: #9CA3AF;">v5.1 Updated</div>
+        </div>
+    </div>
+
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            if(message && message.includes('ResizeObserver')) return;
+            const root = document.getElementById('root');
+            root.innerHTML = `
+                <div style="padding: 20px; color: #b91c1c; font-family: monospace;">
+                    <h3 style="font-weight: bold;">⚠️ 程式發生錯誤 (v5.1)</h3>
+                    <p>${message}</p>
+                    <button onclick="localStorage.clear(); window.location.reload();" style="margin-top: 20px; padding: 10px 20px; background: #1E3A8A; color: white; border: none; border-radius: 8px;">重置 App</button>
+                </div>
+            `;
+        };
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, Component } = React;
+
+        const APP_VERSION = "v5.1";
+        const STORAGE_KEY = "japan_ski_2026_storage"; 
+
+        // --- Data: 2026 Japan Trip ---
+        // 2026/3/15 is a Sunday
+        const INITIAL_ITINERARY = [
+          { day: 1, date: "3/15", dayOfWeek: "日", fullDate: "2026-03-15", weather: "☁️", tempHigh: 13, tempLow: 6, rainProb: 20, location: "東京 (上野/東京車站)", focus: "抵達日本，裝備補給", activities: [ { time: "12:50", title: "TPE 出發 (CX450)", type: "交通", iconName: "Plane", desc: "國泰航空，桃園第一航廈。預計飛行 3小時。" }, { time: "16:50", title: "抵達 NRT 成田機場", type: "交通", iconName: "MapIcon", desc: "入境審查，領取行李，購買/兌換 JR Pass (如需)。" }, { time: "18:00", title: "Skyliner 前往市區", type: "交通", iconName: "Train", desc: "直達日暮里/上野，Check-in 飯店 (上野或東京站周邊)。" }, { time: "19:30", title: "晚餐 & 採買補給", type: "美食", iconName: "Wallet", desc: "便利商店或車站拉麵，購買隔天滑雪零食與暖暖包。" } ] },
+          { day: 2, date: "3/16", dayOfWeek: "一", fullDate: "2026-03-16", weather: "❄️", tempHigh: 2, tempLow: -4, rainProb: 60, location: "越後湯澤 -> 苗場", focus: "新幹線移動，初次滑行", activities: [ { time: "09:00", title: "上越新幹線", type: "交通", iconName: "Train", desc: "東京站 -> 越後湯澤站 (約80分鐘)。" }, { time: "10:30", title: "接駁車前往苗場", type: "交通", iconName: "Truck", desc: "轉乘飯店或滑雪場接駁巴士 (約40分鐘)。" }, { time: "12:00", title: "入住 Naeba Lodge", type: "住宿", iconName: "Home", desc: "Check-in 或寄放行李，租賃滑雪裝備 (Ski/Snowboard)。" }, { time: "14:00", title: "下午滑雪暖身", type: "主景點", iconName: "Snowflake", desc: "苗場滑雪場，先在初學者滑道適應雪況。" } ] },
+          { day: 3, date: "3/17", dayOfWeek: "二", fullDate: "2026-03-17", weather: "☀️", tempHigh: 4, tempLow: -5, rainProb: 10, location: "苗場滑雪場", focus: "全日滑雪 Day 1", activities: [ { time: "08:30", title: "滑雪課程 / 自由滑行", type: "主景點", iconName: "Snowflake", desc: "享受粉雪，搭乘 Prince Gondola 欣賞雪景。" }, { time: "12:00", title: "雪場午餐", type: "美食", iconName: "Wallet", desc: "Food Court 享用咖哩飯或披薩，補充熱量。" }, { time: "13:30", title: "下午滑行", type: "主景點", iconName: "Snowflake", desc: "挑戰不同路線，或練習 S-turn。" }, { time: "18:00", title: "晚餐：Lodge 或 居酒屋", type: "美食", iconName: "Wallet", desc: "享用熱騰騰的火鍋或日式料理，舒緩肌肉。" } ] },
+          { day: 4, date: "3/18", dayOfWeek: "三", fullDate: "2026-03-18", weather: "🌤️", tempHigh: 5, tempLow: -3, rainProb: 20, location: "苗場 / 田代", focus: "全日滑雪 Day 2 (龍纜)", activities: [ { time: "09:00", title: "搭乘「龍之纜車」", type: "主景點", iconName: "MapIcon", desc: "世界最長廂型纜車，前往田代 (Tashiro) 區域，風景絕美。" }, { time: "10:00", title: "田代湖景觀滑雪", type: "主景點", iconName: "Snowflake", desc: "坡度較緩，視野開闊，適合拍照與輕鬆滑行。" }, { time: "15:00", title: "返回苗場區域", type: "交通", iconName: "MapIcon", desc: "注意纜車末班時間，避免被困在另一頭。" }, { time: "19:00", title: "溫泉放鬆", type: "休閒", iconName: "Sun", desc: "苗場溫泉或飯店大浴場，消除疲勞。" } ] },
+          { day: 5, date: "3/19", dayOfWeek: "四", fullDate: "2026-03-19", weather: "🌥️", tempHigh: 8, tempLow: 2, rainProb: 30, location: "苗場 -> 東京市區", focus: "告別雪山，返回都會", activities: [ { time: "09:00", title: "最後滑行 / 退房", type: "checklist", iconName: "Snowflake", desc: "把握最後時光或悠閒早餐，11:00 前辦理 Check-out。" }, { time: "12:00", title: "接駁車前往越後湯澤", type: "交通", iconName: "Truck", desc: "搭乘巴士下山，準備轉乘新幹線。" }, { time: "13:30", title: "越後湯澤站美食", type: "美食", iconName: "Wallet", desc: "午餐推薦爆彈飯糰，或參觀 Ponshukan 清酒博物館。" }, { time: "16:00", title: "東京飯店 Check-in", type: "住宿", iconName: "Home", desc: "抵達東京市區 (飯店待定)，放置行李，切換城市模式。" } ] },
+          { day: 6, date: "3/20", dayOfWeek: "五", fullDate: "2026-03-20", weather: "☀️", tempHigh: 16, tempLow: 9, rainProb: 0, location: "東京 (世田谷/澀谷)", focus: "招財貓、購物與壽喜燒", activities: [ { time: "10:00", title: "豪德寺 (Gotokuji)", type: "景點", iconName: "MapIcon", desc: "搭乘世田谷線，參拜上千隻招財貓，祈求好運。" }, { time: "13:00", title: "澀谷/下北澤 散策", type: "休閒", iconName: "Coffee", desc: "Shibuya Sky 展望台或下北澤古著店巡禮。" }, { time: "16:00", title: "銀座/有樂町 購物", type: "休閒", iconName: "Wallet", desc: "最後採買伴手禮、藥妝與電器。" }, { time: "19:00", title: "晚餐：人形町今半", type: "美食", iconName: "Wallet", desc: "★重點行程：百年老店頂級壽喜燒 (需預約包廂)。" } ] },
+          { day: 7, date: "3/21", dayOfWeek: "六", fullDate: "2026-03-21", weather: "⛅", tempHigh: 16, tempLow: 9, rainProb: 10, location: "東京 -> 台北", focus: "職人街區與歸途", activities: [ { time: "10:00", title: "藏前 (Kuramae) 散策", type: "景點", iconName: "Coffee", desc: "東京布魯克林，逛文具店 (Kakimori)、喝職人咖啡。" }, { time: "12:30", title: "前往成田機場", type: "交通", iconName: "Train", desc: "預計 13:00 前抵達機場 (NRT)。" }, { time: "15:30", title: "搭機返台 (CX451)", type: "交通", iconName: "Plane", desc: "國泰航空，18:40 抵達台北 (TPE)。" }, { time: "19:30", title: "溫暖的家", type: "住宿", iconName: "Home", desc: "整理戰利品與照片。" } ] }
+        ];
+
+        const INITIAL_CHECKLIST = [
+          { id: 1, text: "護照 (效期6個月以上)", checked: false },
+          { id: 2, text: "機票證明 (CX450/CX451)", checked: false },
+          { id: 3, text: "Visit Japan Web 登錄", checked: false },
+          { id: 4, text: "日幣現金 & 信用卡", checked: false },
+          { id: 5, text: "Suica / 西瓜卡 (手機綁定)", checked: false },
+          { id: 6, text: "滑雪襪 (厚長襪 2-3雙)", checked: false },
+          { id: 7, text: "保暖排汗衣 (Base Layer)", checked: false },
+          { id: 8, text: "防摔褲 / 護具 (建議自備)", checked: false },
+          { id: 9, text: "雪鏡 (Goggles) & 手套", checked: false },
+          { id: 10, text: "毛帽 & 圍脖 (Neck Warmer)", checked: false },
+          { id: 11, text: "個人藥品 (肌肉痠痛貼布!)", checked: false },
+          { id: 12, text: "保濕乳液/護唇膏 (日本很乾)", checked: false },
+          { id: 13, text: "轉接頭 (日本雙孔扁插)", checked: false },
+          { id: 14, text: "行動電源 & 充電線", checked: false },
+          { id: 15, text: "eSIM / 漫遊開通", checked: false },
+        ];
+
+        // --- Icons ---
+        const IconBase = ({ children, size = 24, strokeWidth = 2, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+
+        // 新版 Logo：日本滑雪意象 (太陽、富士山、雪花)
+        const JapanLogo = () => (
+          <svg width="40" height="40" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+             <defs>
+               <clipPath id="logo-clip">
+                 <circle cx="256" cy="256" r="240" />
+               </clipPath>
+             </defs>
+             {/* 雪白背景 */}
+             <circle cx="256" cy="256" r="248" fill="#F8FAFC" stroke="#1E3A8A" strokeWidth="16"/>
+             <g clipPath="url(#logo-clip)">
+                {/* 紅日 (Sun) */}
+                <circle cx="256" cy="150" r="80" fill="#BE123C" />
+                
+                {/* 富士山/雪山 (Mountain) */}
+                <path d="M256 180 L 50 450 L 462 450 Z" fill="#1E293B" /> 
+                {/* 山頂積雪 */}
+                <path d="M256 180 L 195 260 C 210 250, 230 270, 256 250 C 280 270, 300 250, 317 260 Z" fill="white"/>
+
+                {/* 雪花 (Snowflakes) */}
+                <g transform="translate(100, 150) scale(0.6)" stroke="#93C5FD" strokeWidth="12">
+                   <path d="M0 -30 L0 30 M-26 -15 L26 15 M-26 15 L26 -15"/>
+                </g>
+                <g transform="translate(400, 200) scale(0.4)" stroke="#93C5FD" strokeWidth="15">
+                   <path d="M0 -30 L0 30 M-26 -15 L26 15 M-26 15 L26 -15"/>
+                </g>
+
+                {/* 滑雪者痕跡 */}
+                <path d="M150 450 Q 256 400, 362 450" stroke="white" strokeWidth="8" strokeDasharray="20 10" fill="none" opacity="0.5"/>
+             </g>
+          </svg>
+        );
+
+        const Icons = {
+            MapIcon: (props) => <IconBase {...props}><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" x2="8" y1="2" y2="18"/><line x1="16" x2="16" y1="6" y2="22"/></IconBase>,
+            Wallet: (props) => <IconBase {...props}><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></IconBase>,
+            CheckSquare: (props) => <IconBase {...props}><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></IconBase>,
+            Plus: (props) => <IconBase {...props}><path d="M5 12h14"/><path d="M12 5v14"/></IconBase>,
+            Sun: (props) => <IconBase {...props}><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></IconBase>,
+            CloudSun: (props) => <IconBase {...props}><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/></IconBase>,
+            CloudRain: (props) => <IconBase {...props}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M8 19v2"/><path d="M8 13v2"/><path d="M16 19v2"/><path d="M16 13v2"/><path d="M12 21v2"/><path d="M12 15v2"/></IconBase>,
+            Snowflake: (props) => <IconBase {...props}><line x1="2" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="22"/><path d="m20 4-8 8-8-8"/><path d="m4 20 8-8 8 8"/></IconBase>,
+            CalendarDays: (props) => <IconBase {...props}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></IconBase>,
+            PhoneCall: (props) => <IconBase {...props}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/><path d="M14.05 2a9 9 0 0 1 8 7.94"/><path d="M14.05 6A5 5 0 0 1 18 10"/></IconBase>,
+            X: (props) => <IconBase {...props}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>,
+            Truck: (props) => <IconBase {...props}><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></IconBase>,
+            Home: (props) => <IconBase {...props}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></IconBase>,
+            Train: (props) => <IconBase {...props}><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M12 3v8"/><path d="m8 19-2 3"/><path d="m18 22-2-3"/><path d="M8 15h0"/><path d="M16 15h0"/></IconBase>,
+            Plane: (props) => <IconBase {...props}><path d="M2 12h20"/><path d="M13 2v20"/><path d="m9 5 3 7 3-7"/><path d="m9 19 3-7 3 7"/></IconBase>,
+            Trash2: (props) => <IconBase {...props}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconBase>,
+            Coffee: (props) => <IconBase {...props}><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/></IconBase>,
+            Camera: (props) => <IconBase {...props}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></IconBase>,
+        };
+
+        const Header = () => (
+            <div className="glass px-6 pt-12 pb-4 sticky top-0 z-30 border-b border-blue-100/50 shadow-sm">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <JapanLogo />
+                  <div>
+                    <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-none">苗場滑雪</h1>
+                    <p className="text-xs text-slate-500 font-medium tracking-wide mt-1">Japan Ski Trip 2026</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+        );
+
+        const BottomNav = ({ activeTab, setActiveTab }) => (
+            <div className="fixed bottom-6 left-6 right-6 bg-[#F5F5F7]/85 backdrop-blur-md shadow-float rounded-2xl flex justify-around py-4 z-50 border border-white/40 max-w-[432px] mx-auto">
+              <button onClick={() => setActiveTab('itinerary')} className={`flex flex-col items-center transition-all ${activeTab === 'itinerary' ? 'text-blue-900 scale-105' : 'text-gray-400'}`}>
+                <Icons.CalendarDays strokeWidth={activeTab === 'itinerary' ? 2.5 : 2} size={24} />
+                <span className="text-[10px] mt-1 font-bold">行程</span>
+              </button>
+              <button onClick={() => setActiveTab('accounting')} className={`flex flex-col items-center transition-all ${activeTab === 'accounting' ? 'text-blue-900 scale-105' : 'text-gray-400'}`}>
+                <Icons.Wallet strokeWidth={activeTab === 'accounting' ? 2.5 : 2} size={24} />
+                <span className="text-[10px] mt-1 font-bold">記帳</span>
+              </button>
+              <button onClick={() => setActiveTab('checklist')} className={`flex flex-col items-center transition-all ${activeTab === 'checklist' ? 'text-blue-900 scale-105' : 'text-gray-400'}`}>
+                <Icons.CheckSquare strokeWidth={activeTab === 'checklist' ? 2.5 : 2} size={24} />
+                <span className="text-[10px] mt-1 font-bold">清單</span>
+              </button>
+            </div>
+        );
+
+        const DaySelector = ({ itinerary, selectedDay, setSelectedDay }) => (
+            <div className="flex px-3 py-3 bg-[#F5F5F7] sticky top-[85px] z-20 overflow-x-auto whitespace-nowrap gap-2 hide-scrollbar">
+                {itinerary.map(d => {
+                    const isActive = d.day === selectedDay;
+                    return (
+                        <button key={d.day} onClick={() => setSelectedDay(d.day)} className={`flex-shrink-0 px-4 py-3 rounded-xl transition-all duration-300 border ${isActive ? 'bg-blue-900 border-blue-900 text-white shadow-md' : 'bg-white border-gray-100 text-slate-500 shadow-sm'}`}>
+                            <div className="text-sm font-bold leading-none">Day {d.day}</div> 
+                            <div className={`text-[10px] mt-1 font-medium ${isActive ? 'opacity-90' : 'opacity-60'}`}>{d.date}</div>
+                        </button>
+                    );
+                })}
+            </div>
+        );
+
+        const ItineraryView = ({ itinerary, selectedDay }) => {
+            const dayData = itinerary.find(d => d.day === selectedDay);
+            if (!dayData) return null;
+
+            const getWeatherIcon = (weather) => {
+                if (weather.includes('🌧️') || weather.includes('rain')) return <Icons.CloudRain className="text-white" size={20}/>;
+                if (weather.includes('❄️')) return <Icons.Snowflake className="text-white" size={20}/>;
+                if (weather.includes('⛅')) return <Icons.CloudSun className="text-white" size={20}/>;
+                return <Icons.Sun className="text-white" size={20}/>;
+            };
+
+            const getTypeStyle = (type) => {
+                switch (type) {
+                    case '交通': return 'text-indigo-600 bg-indigo-50 border-indigo-100';
+                    case '住宿': return 'text-slate-600 bg-slate-50 border-slate-100';
+                    case '主景點': return 'text-blue-700 bg-blue-50 border-blue-100';
+                    case '美食': return 'text-rose-600 bg-rose-50 border-rose-100';
+                    case '休閒': return 'text-teal-600 bg-teal-50 border-teal-100';
+                    default: return 'text-gray-600 bg-gray-50 border-gray-100';
+                }
+            };
+
+            return (
+                <div className="animate-in fade-in">
+                    {/* Hero Card - Icy Gradient */}
+                    <div className="mx-4 mt-2 bg-gradient-to-br from-[#1E3A8A] to-[#60A5FA] rounded-2xl p-6 text-white shadow-soft relative overflow-hidden">
+                         <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-12 -mt-12 blur-xl"></div>
+                         <div className="absolute bottom-0 left-0 w-24 h-24 bg-rose-400 opacity-20 rounded-full -ml-8 -mb-8 blur-xl"></div>
+                         {/* Snow effect */}
+                         <div className="absolute top-4 left-1/2 w-1 h-1 bg-white rounded-full opacity-60"></div>
+                         <div className="absolute top-10 right-1/4 w-1.5 h-1.5 bg-white rounded-full opacity-40"></div>
+                         
+                         <div className="relative z-10 flex justify-between items-start">
+                            <div>
+                                <h2 className="text-2xl font-bold tracking-tight">{dayData.location}</h2>
+                                <p className="text-sm opacity-90 mt-1 font-medium">{dayData.focus}</p>
+                            </div>
+                            <div className="text-right">
+                                <div className="flex items-center justify-end gap-1 mb-1">
+                                    {getWeatherIcon(dayData.weather)}
+                                    <span className="font-bold text-2xl">{dayData.tempHigh}°</span>
+                                    <span className="text-sm opacity-80 mt-1">/ {dayData.tempLow}°</span>
+                                </div>
+                                <div className="text-xs bg-black/20 px-2 py-1 rounded-full inline-block backdrop-blur-sm border border-white/10">
+                                    {dayData.rainProb > 40 ? '☂️' : '💧'} 降水 {dayData.rainProb}%
+                                </div>
+                            </div>
+                         </div>
+                    </div>
+
+                    <div className="p-4 relative">
+                        {dayData.activities.map((act, idx) => {
+                            const isLast = idx === dayData.activities.length - 1;
+                            const mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("日本 " + act.title)}`;
+                            const IconComp = Icons[act.iconName] || Icons.MapIcon;
+
+                            return (
+                                <div key={idx} className="relative pl-8 pb-8">
+                                    {!isLast && <div className="absolute left-2.5 top-2 h-full w-0.5 bg-gray-200/60"></div>}
+                                    <div className="absolute left-0 top-1 w-5 h-5 bg-[#F5F5F7] flex items-center justify-center z-10">
+                                        <div className="w-3 h-3 bg-blue-600 rounded-full ring-4 ring-[#F5F5F7]"></div>
+                                    </div>
+                                    
+                                    <div className="bg-white p-5 rounded-2xl shadow-soft border border-gray-100 hover:shadow-md transition-shadow">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className="font-mono text-sm font-bold text-gray-600 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">{act.time}</span>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded border ${getTypeStyle(act.type)}`}>{act.type}</span>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                            <h3 className="font-bold text-slate-800 text-lg">{act.title}</h3>
+                                        </div>
+                                        
+                                        <p className="text-sm text-slate-500 mt-2 leading-relaxed">{act.desc}</p>
+                                        <a href={mapLink} target="_blank" className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 mt-4 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors">
+                                            <Icons.MapIcon size={14}/> Google Maps
+                                        </a>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const AccountingView = ({ expenses, setExpenses, newItem, setNewItem, showAddExpense, setShowAddExpense, exchangeRate }) => {
+            const totalJPY = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
+            const grouped = expenses.reduce((acc, item) => {
+                const d = item.date;
+                if(!acc[d]) acc[d] = [];
+                acc[d].push(item);
+                return acc;
+            }, {});
+            const sortedDates = Object.keys(grouped).sort().reverse();
+
+            const handleSave = () => {
+                if(!newItem.title || !newItem.amount) return;
+                setExpenses(prev => [{...newItem, id: Date.now(), amount: Number(newItem.amount)}, ...prev]);
+                setNewItem({...newItem, title: "", amount: "", note: ""}); // 保留日期
+                setShowAddExpense(false);
+            };
+            const handleDelete = (id) => setExpenses(prev => prev.filter(e => e.id !== id));
+
+            return (
+                <div className="pb-24 px-4 pt-2">
+                     <div className="bg-white p-5 rounded-2xl shadow-soft border border-gray-100 flex justify-between items-center mb-6">
+                        <div>
+                            <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">總支出 (JPY)</div>
+                            <div className="text-3xl font-black font-mono text-slate-900 mt-1">¥ {totalJPY.toLocaleString()}</div>
+                            <div className="text-xs text-gray-500 mt-1 font-medium">≈ NT$ {Math.round(totalJPY / exchangeRate).toLocaleString()}</div>
+                        </div>
+                        <button onClick={() => setShowAddExpense(true)} className="w-12 h-12 bg-blue-900 rounded-full flex items-center justify-center text-white shadow-lg active:scale-95 transition-all hover:bg-blue-800">
+                            <Icons.Plus strokeWidth={3} size={28}/>
+                        </button>
+                     </div>
+
+                     <div className="space-y-6">
+                        {sortedDates.length === 0 && <div className="text-center text-gray-400 py-10">尚無消費紀錄</div>}
+                        {sortedDates.map(date => (
+                            <div key={date}>
+                                <div className="text-xs font-bold text-gray-400 mb-2 ml-2 tracking-wide">{date}</div>
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                                    {grouped[date].map((exp, i) => (
+                                        <div key={exp.id} className={`p-4 flex justify-between items-center ${i !== grouped[date].length - 1 ? 'border-b border-gray-50' : ''}`}>
+                                            <div className="flex-1 overflow-hidden mr-4">
+                                                <div className="font-bold text-slate-800 text-base truncate">{exp.title}</div>
+                                                {exp.note && <div className="text-xs text-gray-400 truncate mt-0.5">{exp.note}</div>}
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-mono text-sm font-bold text-blue-700">¥{Number(exp.amount).toLocaleString()}</span>
+                                                <button onClick={() => handleDelete(exp.id)} className="text-gray-300 hover:text-rose-500 p-1"><Icons.Trash2 size={16}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                     </div>
+
+                     {/* Modal */}
+                     {showAddExpense && (
+                         <div className="fixed inset-0 bg-[#0F172A]/40 z-[60] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                             <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-white/50">
+                                <h3 className="text-lg font-bold text-center mb-6 text-slate-900">新增支出</h3>
+                                <div className="space-y-4">
+                                    <input type="date" value={newItem.date} onChange={e => setNewItem(prev => ({...prev, date: e.target.value}))} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
+                                    <input type="text" placeholder="項目名稱" value={newItem.title} onChange={e => setNewItem(prev => ({...prev, title: e.target.value}))} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"/>
+                                    <div>
+                                        <input type="number" placeholder="金額 (日圓)" value={newItem.amount} onChange={e => setNewItem(prev => ({...prev, amount: e.target.value}))} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-lg font-mono outline-none focus:ring-2 focus:ring-blue-500"/>
+                                        {newItem.amount && <div className="text-right text-xs text-gray-400 mt-1 font-mono">≈ NT$ {Math.round(Number(newItem.amount)/exchangeRate).toLocaleString()}</div>}
+                                    </div>
+                                    <input type="text" placeholder="備註 (選填)" value={newItem.note} onChange={e => setNewItem(prev => ({...prev, note: e.target.value}))} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"/>
+                                    <div className="flex gap-3 pt-2">
+                                        <button onClick={() => setShowAddExpense(false)} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200">取消</button>
+                                        <button onClick={handleSave} className="flex-1 py-3 bg-blue-900 text-white rounded-xl font-bold shadow-lg shadow-blue-900/30 hover:bg-blue-800">儲存</button>
+                                    </div>
+                                </div>
+                             </div>
+                         </div>
+                     )}
+                </div>
+            );
+        };
+
+        const ChecklistView = ({ checklist, setChecklist, exchangeRate, setExchangeRate }) => {
+            const [input, setInput] = useState("");
+            const completed = checklist.filter(i => i.checked).length;
+            const progress = Math.round((completed / checklist.length) * 100) || 0;
+
+            const add = () => {
+                if(!input.trim()) return;
+                setChecklist(prev => [...prev, { id: Date.now(), text: input.trim(), checked: false }]);
+                setInput("");
+            };
+            const toggle = (id) => setChecklist(prev => prev.map(i => i.id === id ? {...i, checked: !i.checked} : i));
+            const remove = (id) => setChecklist(prev => prev.filter(i => i.id !== id));
+
+            return (
+                <div className="p-4 space-y-6 pb-24">
+                    {/* SOS */}
+                    <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm flex gap-4 items-center">
+                        <div className="bg-rose-50 p-3 rounded-xl"><Icons.PhoneCall className="text-rose-500"/></div>
+                        <div>
+                            <div className="text-sm text-rose-600 font-bold">緊急報案 110 (警) / 119 (火)</div>
+                            <div className="text-xs text-gray-500 mt-0.5">駐日代表處急難救助 +81-80-1009-7179</div>
+                        </div>
+                    </div>
+
+                    {/* Progress */}
+                    <div className="bg-gradient-to-r from-blue-900 to-indigo-800 text-white p-6 rounded-3xl shadow-soft relative overflow-hidden">
+                        <div className="relative z-10">
+                            <h2 className="text-sm font-bold opacity-80 mb-1 tracking-wider">準備進度</h2>
+                            <div className="text-4xl font-black mb-4">{progress}%</div>
+                            <div className="w-full bg-black/20 h-3 rounded-full overflow-hidden backdrop-blur-sm">
+                                <div className="bg-white h-full transition-all duration-700 ease-out" style={{width: `${progress}%`}}></div>
+                            </div>
+                        </div>
+                        <Icons.CheckSquare className="absolute -right-4 -bottom-4 w-32 h-32 text-white opacity-10 rotate-12" />
+                    </div>
+
+                    {/* Add */}
+                    <div className="flex gap-3">
+                        <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="新增待辦 (如: 護照、雪票...)" className="flex-1 bg-white border border-gray-100 shadow-sm rounded-xl px-5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        <button onClick={add} disabled={!input} className="bg-blue-900 text-white w-12 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:shadow-none hover:bg-blue-800 transition-all"><Icons.Plus/></button>
+                    </div>
+
+                    {/* List */}
+                    <div className="bg-white rounded-2xl shadow-soft border border-gray-100 overflow-hidden">
+                        {checklist.map(item => (
+                            <div key={item.id} className="flex items-center justify-between p-4 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => toggle(item.id)}>
+                                <div className="flex items-center gap-4 flex-1">
+                                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-300 ${item.checked ? 'bg-blue-600 border-blue-600' : 'border-gray-200'}`}>
+                                        {item.checked && <Icons.CheckSquare size={14} className="text-white"/>}
+                                    </div>
+                                    <span className={`text-base font-medium transition-all ${item.checked ? 'text-gray-300 line-through' : 'text-slate-700'}`}>{item.text}</span>
+                                </div>
+                                <button onClick={(e) => { e.stopPropagation(); remove(item.id); }} className="text-gray-200 hover:text-rose-400 p-2"><Icons.X size={18}/></button>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Rate */}
+                    <div className="text-center p-4 bg-white/50 rounded-2xl border border-dashed border-gray-200">
+                        <label className="text-xs text-gray-400 font-bold uppercase mr-2">匯率設定 (1 TWD)</label>
+                        <span className="text-sm font-bold text-slate-700 mr-2">≈</span>
+                        <input type="number" value={exchangeRate} onChange={e => setExchangeRate(e.target.value)} className="w-16 text-center border-b-2 border-gray-200 font-mono text-sm focus:border-blue-900 outline-none bg-transparent"/>
+                        <span className="text-xs text-gray-400 ml-1">JPY</span>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Error Boundary ---
+        class ErrorBoundary extends Component {
+            constructor(props) { super(props); this.state = { hasError: false }; }
+            static getDerivedStateFromError(error) { return { hasError: true }; }
+            render() {
+                if (this.state.hasError) return <div className="p-10 text-center"><h1 className="text-xl font-bold mb-4">發生錯誤</h1><button onClick={()=>{localStorage.clear(); window.location.reload();}} className="bg-red-500 text-white px-4 py-2 rounded">重設 APP</button></div>;
+                return this.props.children;
+            }
+        }
+
+        const App = () => {
+            const [tab, setTab] = useState('itinerary');
+            const [day, setDay] = useState(1);
+            const [itinerary, setItinerary] = useState(INITIAL_ITINERARY);
+            const [expenses, setExpenses] = useState([]);
+            const [checklist, setChecklist] = useState(INITIAL_CHECKLIST);
+            // 預設匯率 1 TWD = 4.6 JPY (2024-2025 概況)
+            const [exchangeRate, setExchangeRate] = useState(4.6);
+            const [showAddExpense, setShowAddExpense] = useState(false);
+            const [newItem, setNewItem] = useState({ date: "2026-03-15", title: "", amount: "", note: "" });
+
+            useEffect(() => {
+                try {
+                    const localData = localStorage.getItem(STORAGE_KEY);
+                    if (localData) {
+                        const parsed = JSON.parse(localData);
+                        if(parsed.expenses) setExpenses(parsed.expenses);
+                        if(parsed.checklist) setChecklist(parsed.checklist);
+                        if(parsed.exchangeRate) setExchangeRate(parsed.exchangeRate);
+                    }
+                } catch(e) { console.error("Load Error", e); }
+            }, []);
+
+            useEffect(() => {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({ expenses, checklist, exchangeRate }));
+                } catch(e) { console.error("Save Error", e); }
+            }, [expenses, checklist, exchangeRate]);
+
+            return (
+                <div className="min-h-screen pb-safe">
+                    <Header />
+                    {tab === 'itinerary' && <DaySelector itinerary={itinerary} selectedDay={day} setSelectedDay={setDay} />}
+                    
+                    <main className="max-w-[480px] mx-auto">
+                        {tab === 'itinerary' && <ItineraryView itinerary={itinerary} selectedDay={day} />}
+                        {tab === 'accounting' && (
+                            <AccountingView 
+                                expenses={expenses} setExpenses={setExpenses} 
+                                newItem={newItem} setNewItem={setNewItem}
+                                showAddExpense={showAddExpense} setShowAddExpense={setShowAddExpense}
+                                exchangeRate={exchangeRate}
+                            />
+                        )}
+                        {tab === 'checklist' && (
+                            <ChecklistView 
+                                checklist={checklist} setChecklist={setChecklist}
+                                exchangeRate={exchangeRate} setExchangeRate={setExchangeRate}
+                            />
+                        )}
+                    </main>
+
+                    <BottomNav activeTab={tab} setActiveTab={setTab} />
+                    
+                    <div className="text-center py-6 text-[10px] text-gray-300 font-mono select-none">{APP_VERSION}</div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ErrorBoundary><App /></ErrorBoundary>);
+    </script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => console.log('SW Registered', reg.scope))
+                    .catch(err => console.log('SW Fail', err));
+            });
+        }
+    </script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
